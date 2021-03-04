@@ -1,0 +1,18 @@
+Robot robby {
+	let void Main () {
+		setSpeed(10.0)
+		var double startAngle = getCompassAngle
+		Right 400
+		print "Start angle : " + startAngle
+		var double currentAngle = getCompassAngle
+		loop startAngle < currentAngle
+		{	
+			print "Angle : " + currentAngle
+			Right 400
+			Forward 1000
+			Backward 1000
+			currentAngle = getCompassAngle
+		}
+		print "The END"
+	}
+}
