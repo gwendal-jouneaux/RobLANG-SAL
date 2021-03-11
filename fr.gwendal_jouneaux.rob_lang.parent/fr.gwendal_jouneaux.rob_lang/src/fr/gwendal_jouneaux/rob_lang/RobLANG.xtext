@@ -1,0 +1,245 @@
+grammar fr.gwendal_jouneaux.rob_lang.RobLANG with org.eclipse.xtext.common.Terminals
+
+import "http://www.eclipse.org/emf/2002/Ecore" as ecore
+
+generate robLANG "http://www.gwendal_jouneaux.fr/rob_lang/RobLANG"
+	
+Robot:
+	'Robot' name=ID '{' functions+=FunDefinition+ '}';
+	
+
+/********************************************************************************************************************
+ *                                                 UTILS                                                            *
+ *******************************************************************************************************************/ 
+
+Block:
+	{Block} '{' statements+=Statement* '}'
+;
+
+Type:
+	type=BasicType ("[" dimension=INT "]")?
+;
+
+Symbol:
+	Variable | Parameter
+;
+
+
+/********************************************************************************************************************
+ *                                               FUNCTIONS                                                          *
+ *******************************************************************************************************************/ 
+
+FunDefinition:
+	InlineFunction | ComplexFunction;
+	
+InlineFunction: 
+	'let' type=Type name=ID '(' (varNames+=Parameter (',' varNames+=Parameter)*)? ')' '=>' expression=Expression
+;
+
+ComplexFunction : 
+	'let' type=Type name=ID '(' (varNames+=Parameter (',' varNames+=Parameter)*)? ')' body=Block
+;
+
+Parameter:
+	 type=Type name=ID;
+	
+FunParam:
+	{FunParamExp} expr=Expression |
+	{FunParamCapture } ':' variable=[Variable]
+;
+
+FunCall:
+	function=[FunDefinition] '(' (params+=FunParam (',' params+=FunParam)*)? ')'
+;
+
+
+/********************************************************************************************************************
+ *                                               STATEMENTS                                                         *
+ *******************************************************************************************************************/ 
+
+Statement:
+	AnnotatedStatement | SimpleStatement
+;
+SimpleStatement:
+	Variable | Assignment | PrintExpression | Loop | Condition | Effector | ArrayStatement | Return | Break;
+	
+Variable:
+	'var' type=Type name=ID '=' expression=Expression
+;
+	
+Assignment:
+	assignee=[Symbol] '=' expression=Expression
+;
+	
+PrintExpression:
+	'print' expression=Expression
+;
+
+Loop:
+	'loop' expression=Expression body=Block
+;
+
+Condition:
+	'if' expression=Expression ifz=Block ('else' elsez=Block)?
+;
+
+Return:
+	"return" expression=Expression
+;
+
+Break:
+	{Break} "break"
+;
+	
+		
+/********************************************************************************************************************
+ *                                               EXPRESSION                                                         *
+ *******************************************************************************************************************/ 	
+	
+Expression: Or;
+
+Or returns Expression:
+	And (
+		{Or.left=current} "||" right=And
+	)*;
+
+And returns Expression:
+	Equality (
+		{And.left=current} "&&" right=Equality
+	)*;
+
+Equality returns Expression:
+	Comparison (
+		({Equality.left=current} '==' | {Inequality.left=current} '!=')
+		right=Comparison
+	)*;
+
+Comparison returns Expression:
+	PlusOrMinus (
+		(
+			{GreaterEq.left=current} ">=" | 
+			{LessEq.left=current} "<=" | 
+			{Greater.left=current} '>' | 
+			{Less.left=current} "<"
+		)
+		right=PlusOrMinus
+	)*;
+
+PlusOrMinus returns Expression:
+	MulOrDiv (
+		({Plus.left=current} '+' | {Minus.left=current} '-')
+		right=MulOrDiv
+	)*;
+
+MulOrDiv returns Expression:
+	Primary (
+		({Multiply.left=current} '*' | {Divide.left=current} '/')
+		right=Primary
+	)*;
+
+Primary returns Expression:
+	'(' Expression ')' |
+	{Not} "!" expression=Primary |
+	Atomic;
+
+Atomic returns Expression:
+	Sensor |
+	FunCall |
+	ArrayExpression |
+	{IntConstant} value=INT |
+	{DoubleConstant} value=DOUBLE |
+	{StringConstant} value=STRING |
+	{BoolConstant} value=('true' | 'false') |
+	{SymbolRef} variable=[Symbol];
+ 
+ 
+/********************************************************************************************************************
+ *                                                 ARRAYS                                                           *
+ *******************************************************************************************************************/ 
+ 
+ArrayExpression : ArrayNew | ArrayLength | ArrayGet;
+ArrayStatement : ArraySet | ArrayAdd | ArrayRemove;
+
+ArrayNew :
+	"Array.new(" dimension=INT ")"
+;
+
+ArrayLength :
+	"Array.length(" array=Expression ")"
+;
+
+ArrayGet :
+	"Array.get(" array=Expression "," index=Expression ")"
+;
+
+ArraySet :
+	"Array.set(" array=Expression "," index=Expression "," value=Expression ")"
+;
+
+ArrayAdd :
+	"Array.add(" array=Expression "," valueOrIndex=Expression ("," indexedValue=Expression)? ")"
+;
+
+
+ArrayRemove :
+	"Array.remove(" array=Expression "," index=Expression ")"
+;
+
+/********************************************************************************************************************
+ *                                                ROBOTICS                                                          *
+ *******************************************************************************************************************/ 
+ 
+Effector :
+	Move | Turn | Speed | Go
+;
+Move :MoveForward | MoveBackward;
+MoveForward  : 'Forward' duration=Expression;
+MoveBackward :'Backward' duration=Expression;
+
+Go: AdaptedGo | GoDynamic;
+AdaptedGo: "AdaptiveGo" x=Expression y=Expression;
+GoDynamic:         "Go" x=Expression y=Expression;
+
+Turn : TurnLeft | TurnRight;
+TurnLeft  : 'Left' duration=Expression;
+TurnRight :'Right' duration=Expression;
+
+Speed : SetSpeed;
+SetSpeed :
+	"setSpeed(" speed=Expression ")"
+;
+
+Sensor : 
+	 SenseTime | SenseBattery | SensePosition | SenseDistance | SenseCompass
+;
+
+SenseTime     : {SenseTime}     "getTimestamp";
+SenseBattery  : {SenseBattery}  "getBatteryLevel";
+SensePosition : {SensePosition} "getPosition";
+SenseDistance : {SenseDistance} "getDistance" "(" sensorIndex=INT ")";
+SenseCompass  : {SenseCompass}  "getCompassAngle";
+
+
+
+/********************************************************************************************************************
+ *                                               ADAPTATION                                                         *
+ *******************************************************************************************************************/ 
+ 
+AnnotatedStatement:
+	"[" property=AdaptationProperty lowerBound=Expression higherBound=Expression "]" statement=SimpleStatement
+;
+
+
+/********************************************************************************************************************
+ *                                                TERMINALS                                                         *
+ *******************************************************************************************************************/ 
+ 
+terminal DOUBLE returns ecore::EDouble: INT "." INT;
+
+enum BasicType:
+	STRING="String" | BOOLEAN = "bool" | INTEGER = "int" | DOUBLE = "double" | VOID = "void"
+;
+
+enum AdaptationProperty:
+	TIME="Time" | ENERGY = "Energy"
+;
